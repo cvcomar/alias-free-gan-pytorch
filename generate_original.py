@@ -79,7 +79,6 @@ if __name__ == "__main__":
     transform_p[:, 0] = 0
     transform_p[:, 1] = -1
     transform_p[:, 2:] = 0
-    print(transform_p)
 
     img = generator(
         x,

@@ -554,7 +554,7 @@ class Generator(nn.Module):
 
         return self.affine_fourier(latent)
 
-    def forward(self, style, truncation=1, truncation_latent=None, transform=None):
+    def forward(self, style, truncation=1, truncation_latent=None, transform=None, scale=1, crop=True):
         latent = self.style(style)
 
         if truncation < 1:
@@ -564,6 +564,14 @@ class Generator(nn.Module):
             transform = self.affine_fourier(latent)
 
         out = self.input(latent.shape[0], transform)
+
+        if scale != 1:
+            import torchvision.transforms as transforms
+            length = out.shape[-1]
+            out = transforms.Resize(int(length * scale))(out)
+            if crop:
+                out = transforms.CenterCrop(length)(out)
+
         out = self.conv1(out)
 
         for conv in self.convs:
