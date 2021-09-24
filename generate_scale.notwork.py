@@ -47,6 +47,7 @@ if __name__ == "__main__":
     ckpt = torch.load(args.ckpt, map_location=lambda storage, loc: storage)
 
     conf = GANConfig(**ckpt["conf"])
+    print(conf)
     conf.generator['filter_parameters']['cutoff_0'] = 0.5 
 
     generator = conf.generator.make().to(device)
@@ -79,6 +80,11 @@ if __name__ == "__main__":
         x, truncation=args.truncation, truncation_latent=mean_latent
     )
 
+    transform_p[:,0] = 0
+    transform_p[:,1] = -1 
+    transform_p[:,2] = 0
+    transform_p[:,3] = 0
+
     img = generator(
         x,
         truncation=args.truncation,
@@ -91,4 +97,4 @@ if __name__ == "__main__":
     )
 
     im = transforms.ToPILImage()(grid)
-    im.save('./sample_scale.jpg')
+    im.save('./sample_scale.notwork.jpg')
