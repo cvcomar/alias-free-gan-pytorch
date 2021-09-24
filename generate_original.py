@@ -1,7 +1,10 @@
 import argparse
+import os
+import random
 
 import torch
 from torchvision import utils
+import torchvision.transforms as transforms
 import cv2
 from tqdm import tqdm
 import numpy as np
@@ -15,7 +18,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate samples from the generator")
 
     parser.add_argument(
-        "--n_img", type=int, default=16, help="number of images to be generated"
+        "--seed", type=int, default=1, help="fix random seed"
+    )
+
+    parser.add_argument(
+        "--n_img", type=int, default=8, help="number of images to be generated"
     )
     parser.add_argument(
         "--n_row", type=int, default=4, help="number of samples per row"
@@ -44,6 +51,16 @@ if __name__ == "__main__":
     generator.eval()
 
     mean_latent = generator.mean_latent(args.truncation_mean)
+
+    if args.seed >= 0:
+        np.random.seed(args.seed)
+        random.seed(args.seed)
+        torch.manual_seed(args.seed)
+        torch.cuda.manual_seed_all(args.seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = True
+        os.environ['PYTHONHASHSEED'] = str(args.seed)
+
     x = torch.randn(args.n_img, conf.generator["style_dim"], device=device)
 
     theta = np.radians(np.linspace(0, 360, args.n_frame))
@@ -59,32 +76,21 @@ if __name__ == "__main__":
         x, truncation=args.truncation, truncation_latent=mean_latent
     )
 
-    with torch.no_grad():
-        for i, (t_x, t_y) in enumerate(tqdm(zip(trans_x, trans_y), total=args.n_frame)):
-            transform_p[:, 2] = t_y
-            transform_p[:, 3] = t_x
+    transform_p[:, 0] = 0
+    transform_p[:, 1] = -1
+    transform_p[:, 2:] = 0
+    print(transform_p)
 
-            img = generator(
-                x,
-                truncation=args.truncation,
-                truncation_latent=mean_latent,
-                transform=transform_p,
-            )
-            images.append(
-                utils.make_grid(
-                    img.cpu(), normalize=True, nrow=args.n_row, value_range=(-1, 1)
-                )
-                .mul(255)
-                .permute(1, 2, 0)
-                .numpy()
-                .astype(np.uint8)
-            )
+    img = generator(
+        x,
+        truncation=args.truncation,
+        truncation_latent=mean_latent,
+        transform=transform_p,
+    )
 
-    videodims = (images[0].shape[1], images[0].shape[0])
-    fourcc = cv2.VideoWriter_fourcc(*"VP90")
-    video = cv2.VideoWriter("sample.webm", fourcc, 24, videodims)
+    grid = utils.make_grid(
+        img.cpu(), normalize=True, nrow=args.n_row, range=(-1, 1)
+    )
 
-    for i in tqdm(images):
-        video.write(cv2.cvtColor(i, cv2.COLOR_RGB2BGR))
-
-    video.release()
+    im = transforms.ToPILImage()(grid)
+    im.save('./sample_original.jpg')
