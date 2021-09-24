@@ -63,12 +63,12 @@ if __name__ == "__main__":
 
     x = torch.randn(args.n_img, conf.generator["style_dim"], device=device)
 
-    theta = np.radians(np.linspace(0, 360, args.n_frame))
-    x_2 = np.cos(theta) * args.radius
-    y_2 = np.sin(theta) * args.radius
+    theta = np.radians(np.linspace(-90, 270, args.n_frame))
+    rotate_c = np.cos(theta)
+    rotate_s = np.sin(theta)
 
-    trans_x = x_2.tolist()
-    trans_y = y_2.tolist()
+    rotate_c = rotate_c.tolist()
+    rotate_s = rotate_s.tolist()
 
     images = []
 
@@ -77,9 +77,11 @@ if __name__ == "__main__":
     )
 
     with torch.no_grad():
-        for i, (t_x, t_y) in enumerate(tqdm(zip(trans_x, trans_y), total=args.n_frame)):
-            transform_p[:, 2] = t_y
-            transform_p[:, 3] = t_x
+        for i, (r_c, r_s) in enumerate(tqdm(zip(rotate_c, rotate_s), total=args.n_frame)):
+            transform_p[:, 0] = r_c
+            transform_p[:, 1] = r_s
+            transform_p[:, 2] = 0
+            transform_p[:, 3] = 0
 
             img = generator(
                 x,
@@ -99,7 +101,7 @@ if __name__ == "__main__":
 
     videodims = (images[0].shape[1], images[0].shape[0])
     fourcc = cv2.VideoWriter_fourcc(*"VP90")
-    video = cv2.VideoWriter("sample_translation.webm", fourcc, 24, videodims)
+    video = cv2.VideoWriter("sample_rotation.webm", fourcc, 24, videodims)
 
     for i in tqdm(images):
         video.write(cv2.cvtColor(i, cv2.COLOR_RGB2BGR))
