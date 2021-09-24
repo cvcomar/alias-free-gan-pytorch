@@ -16,11 +16,11 @@ if __name__ == "__main__":
     device = "cuda"
 
     parser = argparse.ArgumentParser(description="Generate samples from the generator")
-
     parser.add_argument(
         "--seed", type=int, default=1, help="fix random seed"
     )
-
+    parser.add_argument('-d', '--duration', type=int, default=30,
+            help='for each frame time')
     parser.add_argument(
         "--n_img", type=int, default=8, help="number of images to be generated"
     )
@@ -99,11 +99,7 @@ if __name__ == "__main__":
                 .astype(np.uint8)
             )
 
-    videodims = (images[0].shape[1], images[0].shape[0])
-    fourcc = cv2.VideoWriter_fourcc(*"VP90")
-    video = cv2.VideoWriter("sample_rotation.webm", fourcc, 24, videodims)
-
-    for i in tqdm(images):
-        video.write(cv2.cvtColor(i, cv2.COLOR_RGB2BGR))
-
-    video.release()
+        images = [transforms.ToPILImage()(x) for x in images]
+        images[0].save("sample_rotation.gif", save_all=True,
+        append_images=images[1:], optimize=False,
+        duration=args.duration, loop=0)
