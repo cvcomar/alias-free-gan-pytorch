@@ -20,7 +20,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--seed", type=int, default=-1, help="fix random seed"
     )
-
     parser.add_argument(
         "--n_img", type=int, default=16, help="number of images to be generated"
     )

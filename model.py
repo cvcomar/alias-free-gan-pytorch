@@ -581,3 +581,35 @@ class Generator(nn.Module):
         out = self.to_rgb(out, latent) / 4
 
         return out
+
+    def z2w(self, style, truncation=1, truncation_latent=None):
+        latent = self.style(style)
+
+        if truncation < 1:
+            latent = truncation_latent + truncation * (latent - truncation_latent)
+
+        return latent
+
+    def forward_w(self, latent, truncation=1, truncation_latent=None, transform=None, scale=1, crop=True):
+
+        if transform is None:
+            transform = self.affine_fourier(latent)
+
+        out = self.input(latent.shape[0], transform)
+
+        if scale != 1:
+            import torchvision.transforms as transforms
+            length = out.shape[-1]
+            out = transforms.Resize(int(length * scale))(out)
+            if crop:
+                out = transforms.CenterCrop(length)(out)
+
+        out = self.conv1(out)
+
+        for conv in self.convs:
+            out = conv(out, latent)
+
+        out = out[:, :, self.margin : -self.margin, self.margin : -self.margin]
+        out = self.to_rgb(out, latent) / 4
+
+        return out
