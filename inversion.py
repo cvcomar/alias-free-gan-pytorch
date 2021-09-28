@@ -292,7 +292,12 @@ def main():
     generator.eval()
 
     # Load inversion target
+    if not os.path.exists(args.path_inversion_result):
+        os.mkdir(args.path_inversion_result)
+
     image = cv2.imread('./inversion_target.jpg')
+    cv2.imwrite(join(args.path_inversion_result,'./inversion_target.jpg'), image)
+
     image_target = torch.from_numpy(preprocess(image[np.newaxis, :], channel_order='BGR')).cuda() # np.float32, -1~1, RGB, BCHW
     image_target_resized = Lanczos_resizing(image_target, (256,256))
 
@@ -339,11 +344,6 @@ def main():
         loss = 0.
         x_rec = generator.forward_w(w)
 
-        # x_rec = (x_rec + 1) / 2
-        # x_rec = x_rec.clip(0, 1)
-        # x_rec = x_rec - x_rec.min()
-        # x_rec = x_rec / x_rec.max()
-
         # mse
         mse_loss = torch.mean((x_rec-target)**2)
         mse_losses.append(mse_loss.item())
@@ -371,13 +371,10 @@ def main():
 
         if i % 100 == 0:
             rec_image = postprocess(x_rec.clone())[0]
-            # im_inv = ToPILImage()(rec_image)
-            # im_inv.save(join(args.path_inversion_result, 'inversion_%06d.jpg' % i))
             cv2.imwrite(join(args.path_inversion_result, 'inversion_%06d.jpg' % i), rec_image)
 
-
-    im_inv = ToPILImage()(x_rec.squeeze(0))
-    im_inv.save(join(args.path_inversion_result, 'inversion_last.jpg'))
+    rec_image = postprocess(x_rec.clone())[0]
+    cv2.imwrite(join(args.path_inversion_result, 'inversion_last.jpg'), rec_image)
 
     import matplotlib.pyplot as plt
     plt.clf()
