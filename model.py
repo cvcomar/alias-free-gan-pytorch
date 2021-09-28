@@ -555,6 +555,8 @@ class Generator(nn.Module):
         return self.affine_fourier(latent)
 
     def forward(self, style, truncation=1, truncation_latent=None, transform=None, scale=1, crop=True):
+
+        # Mapping network
         latent = self.style(style)
 
         if truncation < 1:
@@ -565,12 +567,14 @@ class Generator(nn.Module):
 
         out = self.input(latent.shape[0], transform)
 
+        ############# Added ##############
         if scale != 1:
             import torchvision.transforms as transforms
             length = out.shape[-1]
             out = transforms.Resize(int(length * scale))(out)
             if crop:
                 out = transforms.CenterCrop(length)(out)
+        ##################################
 
         out = self.conv1(out)
 
@@ -590,20 +594,10 @@ class Generator(nn.Module):
 
         return latent
 
-    def forward_w(self, latent, truncation=1, truncation_latent=None, transform=None, scale=1, crop=True):
-
-        if transform is None:
-            transform = self.affine_fourier(latent)
+    def forward_w(self, latent):
+        transform = self.affine_fourier(latent)
 
         out = self.input(latent.shape[0], transform)
-
-        if scale != 1:
-            import torchvision.transforms as transforms
-            length = out.shape[-1]
-            out = transforms.Resize(int(length * scale))(out)
-            if crop:
-                out = transforms.CenterCrop(length)(out)
-
         out = self.conv1(out)
 
         for conv in self.convs:
@@ -611,5 +605,20 @@ class Generator(nn.Module):
 
         out = out[:, :, self.margin : -self.margin, self.margin : -self.margin]
         out = self.to_rgb(out, latent) / 4
+
+        return out
+
+    def forward_wp(self, latents):
+
+        transform = self.affine_fourier(latents[:, 0, :])
+
+        out = self.input(latents[:, 0, :].shape[0], transform)
+        out = self.conv1(out)
+
+        for conv, latent in zip(self.convs, latents[:, 1:-1, :].squeeze(0).unsqueeze(1)):
+            out = conv(out, latent)
+
+        out = out[:, :, self.margin : -self.margin, self.margin : -self.margin]
+        out = self.to_rgb(out, latents[:, -1, :]) / 4
 
         return out

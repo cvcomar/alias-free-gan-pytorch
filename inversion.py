@@ -2,6 +2,7 @@ import os
 from os.path import join
 from collections import OrderedDict
 
+import cv2
 import random
 import numpy as np
 import argparse
@@ -14,6 +15,7 @@ from torchvision.transforms import PILToTensor, ToPILImage
 from model import Generator
 from config import GANConfig
 
+import PIL
 from PIL import Image
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -155,7 +157,7 @@ def parse_args():
     parser.add_argument("--radius", type=float, default=30)
     parser.add_argument(
         "--ckpt", metavar="CKPT", type=str, help="path to the model checkpoint",
-        default='./checkpoint/140000.pt'
+        default='./checkpoint/310000.pt'
     )
 
     # stylegan
@@ -212,6 +214,60 @@ def load_perceptual_model():
     return perceptual_model
 
 
+
+def preprocess(images, channel_order='RGB'):
+    # input : np.uint8, 0~255, RGB, BHWC
+    # output : np.float32, -1~1, RGB, BCHW
+
+    """Preprocesses the input images if needed.
+    This function assumes the input numpy array is with shape [batch_size,
+    height, width, channel]. Here, `channel = 3` for color image and
+    `channel = 1` for grayscale image. The returned images are with shape
+    [batch_size, channel, height, width].
+    NOTE: The channel order of input images is always assumed as `RGB`.
+    Args:
+      images: The raw inputs with dtype `numpy.uint8` and range [0, 255].
+    Returns:
+      The preprocessed images with dtype `numpy.float32` and range
+        [self.min_val, self.max_val].
+    Raises:
+      ValueError: If the input `images` are not with type `numpy.ndarray` or not
+        with dtype `numpy.uint8` or not with shape [batch_size, height, width,
+        channel].
+    """
+    image_channels = 3
+    max_val = 1.0
+    min_val = -1.0
+
+    if image_channels == 3 and channel_order == 'BGR':
+      images = images[:, :, :, ::-1]
+    images = images / 255.0 * (max_val - min_val) + min_val
+    images = images.astype(np.float32).transpose(0, 3, 1, 2)
+    return images
+
+def postprocess(images):
+    # input : tensor, -1~1, RGB, BCHW
+    # output : np.uint8, 0~255, BGR, BHWC
+    """Post-processes images from `torch.Tensor` to `numpy.ndarray`."""
+    images = images.detach().cpu().numpy()
+    images = (images + 1.) * 255. / 2.
+    images = np.clip(images + 0.5, 0, 255).astype(np.uint8)
+    images = images.transpose(0, 2, 3, 1)[:,:,:,[2,1,0]]
+    return images
+
+def Lanczos_resizing(image_target, resizing_tuple=(256,256)):
+    # input : -1~1, RGB, BCHW, Tensor
+    # output : -1~1, RGB, BCHW, Tensor
+    image_target_resized = image_target.clone().cpu().numpy()
+    image_target_resized = (image_target_resized + 1.) * 255. / 2.
+    image_target_resized = np.clip(image_target_resized + 0.5, 0, 255).astype(np.uint8)
+    image_target_resized = image_target_resized.transpose(0, 2, 3, 1)[0]
+    image_target_resized = Image.fromarray(image_target_resized) #PIL, 0~255, uint8, RGB, HWC
+    image_target_resized = np.array(image_target_resized.resize(resizing_tuple, PIL.Image.LANCZOS))
+    image_target_resized = torch.from_numpy(preprocess(image_target_resized[np.newaxis,:])).cuda()
+    return image_target_resized.clone()
+
+
 def main():
     args = parse_args()
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
@@ -235,43 +291,42 @@ def main():
     generator.load_state_dict(ckpt["g_ema"], strict=False)
     generator.eval()
 
-    # Get initial latent
-    mean_latent = generator.mean_latent(args.truncation_mean)
-
-    z = torch.randn(args.n_img, conf.generator["style_dim"], device=DEVICE)
-
-    transform_p = generator.get_transform(
-        z, truncation=args.truncation, truncation_latent=mean_latent
-    )
-
-    transform_p[:, 0] = 0
-    transform_p[:, 1] = -1
-    transform_p[:, 2:] = 0
-
     # Load inversion target
-    # with torch.no_grad():
-    target = Image.open(args.target_images_path)
-    target.save(join(args.path_inversion_result, 'target.jpg'))
-    target = PILToTensor()(target).unsqueeze(0).to(DEVICE)
+    image = cv2.imread('./inversion_target.jpg')
+    image_target = torch.from_numpy(preprocess(image[np.newaxis, :], channel_order='BGR')).cuda() # np.float32, -1~1, RGB, BCHW
+    image_target_resized = Lanczos_resizing(image_target, (256,256))
 
-    # Optimization setting 
-    optimizing_variable = []
+    target = image_target.clone().contiguous()
+    target_resized = image_target_resized.clone().contiguous()
 
-    if True: #w
-        with torch.no_grad():
+
+    # Get initial latent
+    with torch.no_grad():
+        mean_latent = generator.mean_latent(args.truncation_mean)
+
+        z = torch.randn(args.n_img, conf.generator["style_dim"], device=DEVICE)
+
+        transform_p = generator.get_transform(
+            z, truncation=args.truncation, truncation_latent=mean_latent
+        )
+
+        # Optimization setting 
+        optimizing_variable = []
+
+        if True: # w
             w = generator.z2w(
                 z,
                 truncation=args.truncation,
                 truncation_latent=mean_latent,
             )
-        w.requires_grad=True
-        optimizing_variable.append(w)
-    elif False: #wp
-        pass
-    elif False: # 
-        pass
-    elif False: #z
-        pass
+            w.requires_grad=True
+            optimizing_variable.append(w)
+        elif False: # wp 16EA
+            pass
+        elif False: # 
+            pass
+        elif False: # z
+            pass
 
     optimizer = torch.optim.Adam(optimizing_variable, lr=args.lr)
 
@@ -282,27 +337,24 @@ def main():
 
     for i in tqdm(range(args.num_iters)):
         loss = 0.
-
-        x_rec = generator.forward_w(
-            w,
-            truncation=args.truncation,
-            truncation_latent=mean_latent,
-            transform=transform_p,
-        )
+        x_rec = generator.forward_w(w)
 
         # x_rec = (x_rec + 1) / 2
         # x_rec = x_rec.clip(0, 1)
-        x_rec = x_rec - x_rec.min()
-        x_rec = x_rec / x_rec.max()
+        # x_rec = x_rec - x_rec.min()
+        # x_rec = x_rec / x_rec.max()
 
         # mse
         mse_loss = torch.mean((x_rec-target)**2)
         mse_losses.append(mse_loss.item())
         loss += mse_loss * args.mse_weight
 
+        reshaped_x_rec = torch.nn.functional.interpolate(x_rec, size=(256,256), mode='bicubic')
+
         # lpips
-        target_features = perceptual_model.forward_network(target)
-        x_rec_features = perceptual_model.forward_network(x_rec)
+        target_features = perceptual_model.forward_network(target_resized)
+        x_rec_features  = perceptual_model.forward_network(reshaped_x_rec)
+
 
         lpips_loss = 0.
         for feature_idx in range(4):
@@ -314,17 +366,18 @@ def main():
 
         losses.append(loss.item())
         optimizer.zero_grad()
-        loss.backward(retain_graph=True)
+        loss.backward()
         optimizer.step()
 
-        if i % 10 == 0:
-            im_inv = ToPILImage()(x_rec.squeeze(0))
-            im_inv.save(join(args.path_inversion_result,
-                'inversion_%06d.jpg' % i))
+        if i % 100 == 0:
+            rec_image = postprocess(x_rec.clone())[0]
+            # im_inv = ToPILImage()(rec_image)
+            # im_inv.save(join(args.path_inversion_result, 'inversion_%06d.jpg' % i))
+            cv2.imwrite(join(args.path_inversion_result, 'inversion_%06d.jpg' % i), rec_image)
 
 
     im_inv = ToPILImage()(x_rec.squeeze(0))
-    im_inv.save('inversion_last.jpg')
+    im_inv.save(join(args.path_inversion_result, 'inversion_last.jpg'))
 
     import matplotlib.pyplot as plt
     plt.clf()
@@ -332,7 +385,7 @@ def main():
     plt.plot(mse_losses, color='red', label=f'mse_losses')
     plt.plot(lpips_losses, color='blue', label=f'lpips_losses')
     plt.legend()
-    plt.savefig('loss_graph.png')
+    plt.savefig(join(args.path_inversion_result, 'loss_graph.png'))
 
 
 if __name__ == '__main__':

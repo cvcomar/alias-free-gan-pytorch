@@ -16,11 +16,11 @@ if __name__ == "__main__":
     device = "cuda"
 
     parser = argparse.ArgumentParser(description="Generate samples from the generator")
+
     parser.add_argument(
         "--seed", type=int, default=1, help="fix random seed"
     )
-    parser.add_argument('-d', '--duration', type=int, default=60,
-            help='for each frame time')
+
     parser.add_argument(
         "--n_img", type=int, default=8, help="number of images to be generated"
     )
@@ -39,8 +39,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_frame", type=int, default=120)
     parser.add_argument("--radius", type=float, default=30)
     parser.add_argument(
-        "ckpt", metavar="CKPT", type=str, help="path to the model checkpoint"
-    )
+        "ckpt", metavar="CKPT", type=str, help="path to the model checkpoint")
 
     args = parser.parse_args()
 
@@ -61,45 +60,21 @@ if __name__ == "__main__":
         torch.backends.cudnn.benchmark = True
         os.environ['PYTHONHASHSEED'] = str(args.seed)
 
-    x = torch.randn(args.n_img, conf.generator["style_dim"], device=device)
+    num_wp = 16
 
-    theta = np.radians(np.linspace(-90, 270, args.n_frame))
-    rotate_c = np.cos(theta)
-    rotate_s = np.sin(theta)
+    x = torch.randn(args.n_img * num_wp, conf.generator["style_dim"],
+            device=device)
 
-    rotate_c = rotate_c.tolist()
-    rotate_s = rotate_s.tolist()
+    wps = generator.z2w(x,
+            truncation=args.truncation,
+            truncation_latent=mean_latent,
+            ).reshape(num_wp, args.n_img, -1)
 
-    images = []
+    img = generator.forward_wp(wps)
 
-    transform_p = generator.get_transform(
-        x, truncation=args.truncation, truncation_latent=mean_latent
+    grid = utils.make_grid(
+        img.cpu(), normalize=True, nrow=args.n_row, range=(-1, 1)
     )
 
-    with torch.no_grad():
-        for i, (r_c, r_s) in enumerate(tqdm(zip(rotate_c, rotate_s), total=args.n_frame)):
-            transform_p[:, 0] = r_c
-            transform_p[:, 1] = r_s
-            transform_p[:, 2] = 0
-            transform_p[:, 3] = 0
-
-            img = generator(
-                x,
-                truncation=args.truncation,
-                truncation_latent=mean_latent,
-                transform=transform_p,
-            )
-            images.append(
-                utils.make_grid(
-                    img.cpu(), normalize=True, nrow=args.n_row, range=(-1, 1)
-                )
-                .mul(255)
-                .permute(1, 2, 0)
-                .numpy()
-                .astype(np.uint8)
-            )
-
-        images = [transforms.ToPILImage()(x) for x in images]
-        images[0].save("sample_rotation.gif", save_all=True,
-        append_images=images[1:], optimize=False,
-        duration=args.duration, loop=0)
+    im = transforms.ToPILImage()(grid)
+    im.save('./sample_wp.jpg')
