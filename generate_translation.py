@@ -23,10 +23,10 @@ if __name__ == "__main__":
     parser.add_argument('-d', '--duration', type=int, default=30,
             help='for each frame time')
     parser.add_argument(
-        "--n_img", type=int, default=8, help="number of images to be generated"
+        "--n_img", type=int, default=4, help="number of images to be generated"
     )
     parser.add_argument(
-        "--n_row", type=int, default=4, help="number of samples per row"
+        "--n_row", type=int, default=2, help="number of samples per row"
     )
     parser.add_argument(
         "--truncation", type=float, default=0.5, help="truncation ratio"
@@ -40,8 +40,8 @@ if __name__ == "__main__":
     parser.add_argument("--n_frame", type=int, default=120)
     parser.add_argument("--radius", type=float, default=30)
     parser.add_argument(
-        "ckpt", metavar="CKPT", type=str, help="path to the model checkpoint"
-    )
+        "--ckpt", metavar="CKPT", type=str, help="path to the model checkpoint",
+        default='./checkpoint/310000.pt')
 
     args = parser.parse_args()
 

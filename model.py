@@ -204,7 +204,7 @@ class FourierFeature(nn.Module):
         )
         self.eps = eps
 
-    def forward(self, batch_size, affine=None):
+    def forward(self, batch_size, affine=None, affine_norm=True):
         coord_map = torch.ger(self.freqs, self.coords)
         coord_map = 2 * math.pi * coord_map
         size = self.coords.shape[0]
@@ -212,8 +212,9 @@ class FourierFeature(nn.Module):
         coord_w = coord_h.transpose(1, 2)
 
         if affine is not None:
-            norm = torch.norm(affine[:, :2], dim=-1, keepdim=True)
-            affine = affine / (norm + self.eps)
+            if affine_norm:
+                norm = torch.norm(affine[:, :2], dim=-1, keepdim=True)
+                affine = affine / (norm + self.eps)
 
             r_c, r_s, t_x, t_y = affine.view(
                 affine.shape[0], 1, 1, 1, affine.shape[-1]
@@ -596,6 +597,44 @@ class Generator(nn.Module):
 
     def forward_w(self, latent):
         transform = self.affine_fourier(latent)
+
+        out = self.input(latent.shape[0], transform)
+        out = self.conv1(out)
+
+        for conv in self.convs:
+            out = conv(out, latent)
+
+        out = out[:, :, self.margin : -self.margin, self.margin : -self.margin]
+        out = self.to_rgb(out, latent) / 4
+
+        return out
+
+    def forward_w_t(self, latent, transform):
+        out = self.input(latent.shape[0], transform)
+        out = self.conv1(out)
+
+        for conv in self.convs:
+            out = conv(out, latent)
+
+        out = out[:, :, self.margin : -self.margin, self.margin : -self.margin]
+        out = self.to_rgb(out, latent) / 4
+
+        return out
+
+    def forward_w_tn(self, latent, transform):
+        out = self.input(latent.shape[0], transform, affine_norm=False)
+        out = self.conv1(out)
+
+        for conv in self.convs:
+            out = conv(out, latent)
+
+        out = out[:, :, self.margin : -self.margin, self.margin : -self.margin]
+        out = self.to_rgb(out, latent) / 4
+
+        return out
+
+    def forward_w_wt(self, latent, latent_t):
+        transform = self.affine_fourier(latent_t)
 
         out = self.input(latent.shape[0], transform)
         out = self.conv1(out)

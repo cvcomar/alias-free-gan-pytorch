@@ -16,10 +16,11 @@ if __name__ == "__main__":
     device = "cuda"
 
     parser = argparse.ArgumentParser(description="Generate samples from the generator")
+
     parser.add_argument(
         "--seed", type=int, default=1, help="fix random seed"
     )
-    parser.add_argument('-d', '--duration', type=int, default=60,
+    parser.add_argument('-d', '--duration', type=int, default=30,
             help='for each frame time')
     parser.add_argument(
         "--n_img", type=int, default=4, help="number of images to be generated"
@@ -36,8 +37,7 @@ if __name__ == "__main__":
         default=4096,
         help="number of vectors to calculate mean for the truncation",
     )
-    parser.add_argument("--n_frame", type=int, default=120)
-    parser.add_argument("--radius", type=float, default=30)
+    parser.add_argument("--n_frame", type=int, default=200)
     parser.add_argument(
         "--ckpt", metavar="CKPT", type=str, help="path to the model checkpoint",
         default='./checkpoint/310000.pt')
@@ -63,12 +63,12 @@ if __name__ == "__main__":
 
     x = torch.randn(args.n_img, conf.generator["style_dim"], device=device)
 
-    theta = np.radians(np.linspace(-90, 270, args.n_frame))
-    rotate_c = np.cos(theta)
-    rotate_s = np.sin(theta)
+    ts = np.linspace(-10, 10, args.n_frame)
+    x_2 = ts
+    y_2 = np.zeros_like(ts)
 
-    rotate_c = rotate_c.tolist()
-    rotate_s = rotate_s.tolist()
+    trans_x = x_2.tolist()
+    trans_y = y_2.tolist()
 
     images = []
 
@@ -77,11 +77,11 @@ if __name__ == "__main__":
     )
 
     with torch.no_grad():
-        for i, (r_c, r_s) in enumerate(tqdm(zip(rotate_c, rotate_s), total=args.n_frame)):
-            transform_p[:, 0] = r_c
-            transform_p[:, 1] = r_s
-            transform_p[:, 2] = 0
-            transform_p[:, 3] = 0
+        for i, (t_x, t_y) in enumerate(tqdm(zip(trans_x, trans_y), total=args.n_frame)):
+            transform_p[:, 0] = 0.
+            transform_p[:, 1] = -1.
+            transform_p[:, 2] = t_x
+            transform_p[:, 3] = t_y
 
             img = generator(
                 x,
@@ -98,8 +98,7 @@ if __name__ == "__main__":
                 .numpy()
                 .astype(np.uint8)
             )
-
         images = [transforms.ToPILImage()(x) for x in images]
-        images[0].save("sample_rotation.gif", save_all=True,
+        images[0].save("sample_translation_onedir.gif", save_all=True,
         append_images=images[1:], optimize=False,
         duration=args.duration, loop=0)
