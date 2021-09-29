@@ -21,7 +21,7 @@ if __name__ == "__main__":
         "--seed", type=int, default=1, help="fix random seed"
     )
     parser.add_argument(
-        "--scale", type=float, default=2.0, help="scale size"
+        "--scale", type=float, default=1.0, help="scale size"
     )
     parser.add_argument(
         "--crop", action='store_false', default=True, help="crop feature"
@@ -43,8 +43,8 @@ if __name__ == "__main__":
     )
     parser.add_argument("--n_frame", type=int, default=3)
     parser.add_argument(
-        "ckpt", metavar="CKPT", type=str, help="path to the model checkpoint"
-    )
+        "--ckpt", metavar="CKPT", type=str, help="path to the model checkpoint",
+        default='./checkpoint/310000.pt')
 
     args = parser.parse_args()
 
@@ -85,4 +85,4 @@ if __name__ == "__main__":
                 img.cpu(), normalize=True, nrow=args.n_row, range=(-1, 1)
             ).mul(255).permute(1, 2, 0).numpy().astype(np.uint8)
         im = transforms.ToPILImage()(grid)
-        im.save('sample_scale.jpg')
+        im.save('sample_scale_%.2f.jpg' % args.scale)
