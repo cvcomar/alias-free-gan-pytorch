@@ -648,16 +648,27 @@ class Generator(nn.Module):
         return out
 
     def forward_wp(self, latents):
+        transform = self.affine_fourier(latents[0])
 
-        transform = self.affine_fourier(latents[:, 0, :])
-
-        out = self.input(latents[:, 0, :].shape[0], transform)
+        out = self.input(latents[0].shape[0], transform)
         out = self.conv1(out)
 
-        for conv, latent in zip(self.convs, latents[:, 1:-1, :].squeeze(0).unsqueeze(1)):
+        for conv, latent in zip(self.convs, latents[1:-1]):
             out = conv(out, latent)
 
         out = out[:, :, self.margin : -self.margin, self.margin : -self.margin]
-        out = self.to_rgb(out, latents[:, -1, :]) / 4
+        out = self.to_rgb(out, latents[-1]) / 4
+
+        return out
+
+    def forward_wp_tn(self, latents, transform):
+        out = self.input(latents[0].shape[0], transform, affine_norm=False)
+        out = self.conv1(out)
+
+        for conv, latent in zip(self.convs, latents[:-1]):
+            out = conv(out, latent)
+
+        out = out[:, :, self.margin : -self.margin, self.margin : -self.margin]
+        out = self.to_rgb(out, latents[-1]) / 4
 
         return out

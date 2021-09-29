@@ -1,4 +1,5 @@
 import os
+import math
 from os.path import join
 from collections import OrderedDict
 
@@ -315,27 +316,25 @@ def main():
             z.clone().detach(),
             truncation=args.truncation, truncation_latent=mean_latent
         )
-
-        affine[:, 0] = 0
-        affine[:, 1] = -1 
+        affine[:, 0] = math.cos(math.radians(-45))
+        affine[:, 1] = math.sin(math.radians(-45))
         affine[:, 2] = 0
         affine[:, 3] = 0
 
         # Optimization setting 
-        optimizing_variable = []
-
+        wp =[]
         w = generator.z2w(
             z,
             truncation=args.truncation,
             truncation_latent=mean_latent,
         )
-        w.requires_grad = True
-        affine.requires_grad = True
 
-        optimizing_variable.append(w)
-        optimizing_variable.append(affine)
+        for i in range(15):
+            w_ = w.clone().detach()
+            w_.requires_grad=True
+            wp.append(w_)
 
-    optimizer = torch.optim.Adam(optimizing_variable, lr=args.lr)
+    optimizer = torch.optim.Adam(wp, lr=args.lr)
 
     # Do inversion
     losses = []
@@ -344,10 +343,7 @@ def main():
 
     for i in tqdm(range(args.num_iters)):
         loss = 0.
-
-        # inference
-        x_rec = generator.forward_w_tn(w, affine)
-
+        x_rec = generator.forward_wp_tn(wp, affine)
 
         # mse
         mse_loss = torch.mean((x_rec-target)**2)

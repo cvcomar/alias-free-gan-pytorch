@@ -1,4 +1,5 @@
 import os
+import math
 from os.path import join
 from collections import OrderedDict
 
@@ -316,8 +317,8 @@ def main():
             truncation=args.truncation, truncation_latent=mean_latent
         )
 
-        affine[:, 0] = 0
-        affine[:, 1] = -1 
+        affine[:, 0] = math.cos(math.radians(-45))
+        affine[:, 1] = math.sin(math.radians(-45))
         affine[:, 2] = 0
         affine[:, 3] = 0
 
@@ -330,10 +331,8 @@ def main():
             truncation_latent=mean_latent,
         )
         w.requires_grad = True
-        affine.requires_grad = True
 
         optimizing_variable.append(w)
-        optimizing_variable.append(affine)
 
     optimizer = torch.optim.Adam(optimizing_variable, lr=args.lr)
 
