@@ -1,6 +1,6 @@
 #!/bin/bash
 
-for ckpt in $(find ./checkpoint/ | grep pt | sort -r | head -n 17 | sort | head -n 14); do
+for ckpt in $(find ./checkpoint/ | grep pt | sort -r | head -n 7 | sort ); do
     echo $ckpt
     echo $ckpt >> ./fid-log
     rm -rf ./img4fid/
