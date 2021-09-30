@@ -587,6 +587,47 @@ class Generator(nn.Module):
 
         return out
 
+    def forward_patch(self, style, truncation=1, truncation_latent=None, transform=None):
+
+        # Mapping network
+        latent = self.style(style)
+
+        if truncation < 1:
+            latent = truncation_latent + truncation * (latent - truncation_latent)
+
+        if transform is None:
+            transform = self.affine_fourier(latent)
+
+        out = self.input(latent.shape[0], transform)
+
+        ## Patching ##
+        if False:
+            patch = out[:, :, 10:18, 10:18]
+            out[:, :, 10:18, 18:26] = patch
+            out[:, :, 18:26, 10:18] = patch
+            out[:, :, 18:26, 18:26] = patch
+        if True:
+            patch = out[:, :, :18, :18]
+            out[:, :, :18, 18:] = patch
+            out[:, :, 18:, :18] = patch
+            out[:, :, 18:, 18:] = patch
+        if False:
+            out[:, :, :10, :] = 0
+            out[:, :, :, :10] = 0
+            out[:, :, 26:, :] = 0
+            out[:, :, :, 26:] = 0
+        ##############
+
+        out = self.conv1(out)
+
+        for conv in self.convs:
+            out = conv(out, latent)
+
+        out = out[:, :, self.margin : -self.margin, self.margin : -self.margin]
+        out = self.to_rgb(out, latent) / 4
+
+        return out
+
     def z2w(self, style, truncation=1, truncation_latent=None):
         latent = self.style(style)
 
